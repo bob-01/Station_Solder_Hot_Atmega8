@@ -2,6 +2,11 @@
 // #define clk_pin      3  // SH_CP  11-Pin
 // #define latch_pin    4  // ST_CP  12-Pin
 
+// Ноги для энкодера
+// #define pin_A          5
+// #define pin_B          6
+// #define EncoderButton  7
+
 const uint8_t NUM_SEG[] = {
   1,
   2,
@@ -21,16 +26,52 @@ const uint8_t SEG[] = {
 	239,	// 9
 };
 
+unsigned long currentTime,loopTime;
+
+int8_t EncMove = 0;
+
+uint8_t EncFlag, EncLast, EncCurrent;
+
+uint16_t SolderTemp = 325, HotTemp = 320;
+
 void setup(){
-/*
-  2,3,4 порты настраиваем на вывод
-*/
+
+  //2,3,4 порты настраиваем на вывод
   DDRD |= B00011100;
+
+  //0,1,2,3 порты настраиваем на вывод
+  DDRB |= B00001111;
+  // Подтягиваем ножки к 1
+  PORTB |= B00000011;
+
+  // 5,6 на ввод
+  DDRD &= ~B11100000;
+  // Подтягиваем ножки к 1
+  PORTD |= B11100000;
+
+  currentTime = millis();
+  loopTime = currentTime; 
 }
 
 void loop(){
 
-  uint16_t SolderTemp = 325, HotTemp = 427;
+  currentTime = millis();
+    
+  //-------------------Проверка каждые 3 мс
+  if(currentTime >= (loopTime + 3)) {
+    CheckEncoder();
+    
+    // Счетчик прошедшего времени      
+    loopTime = currentTime;
+  }
+  //-------------------Конец проверка каждые 3 мс
+
+  if (EncFlag) {
+    SolderTemp  += EncMove;
+    HotTemp     += EncMove;
+    EncFlag = false;
+  }
+
   PrintTemp( SolderTemp, HotTemp);
 
 }//End loop
@@ -81,4 +122,25 @@ void ShuftOut( uint8_t value ) {
     }
 }
 // End ShuftOut
+
+void CheckEncoder() {
+
+  EncCurrent = PIND & B01100000;
+  EncMove = 0;
+  if( EncCurrent != EncLast ){
+        if(EncLast == 96){
+              if(EncCurrent == 32) EncMove = -1;
+              if(EncCurrent == 64) EncMove = 1;
+        }
+    EncLast = EncCurrent;
+    EncFlag = true;
+  }//End Проверка состояния encoder
+
+}//End Check Enc
+
+
+
+
+
+
 

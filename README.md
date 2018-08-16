@@ -8,4 +8,4 @@
 
 ## Схема станции в процессе обдумавания, код в процесс написания
 
-[](https://github.com/bob-01/Station_Solder_Hot_Atmega8/blob/master/proteus.png)
+![Схема](https://github.com/bob-01/Station_Solder_Hot_Atmega8/blob/master/proteus.png)

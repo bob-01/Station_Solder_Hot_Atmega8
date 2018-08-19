@@ -1,4 +1,4 @@
-#define data_pin     2  // DS     14-Pin
+// #define data_pin     2  // DS     14-Pin
 // #define clk_pin      3  // SH_CP  11-Pin
 // #define latch_pin    4  // ST_CP  12-Pin
 
@@ -54,7 +54,7 @@ void setup(){
 }
 
 void loop(){
-
+while (1) {
   currentTime = millis();
     
   //-------------------Проверка каждые 3 мс
@@ -73,8 +73,9 @@ void loop(){
   }
 
   PrintTemp( SolderTemp, HotTemp);
-
-}//End loop
+}
+}
+//End loop
 
 void PrintTemp( uint16_t solder_temp, uint16_t hot_temp ) {
   
@@ -100,47 +101,41 @@ void PrintTemp( uint16_t solder_temp, uint16_t hot_temp ) {
     
     // Отправляем байт на последнею микросхему в цепочке
     // инвертирование битов исключающим или ^
-    ShuftOut( SEG[ solder_s[i] ] ^ 0xFF );
+    ShiftOut( SEG[ solder_s[i] ] ^ 0xFF );
     // Отправляем байт на вторую микросхему в цепочке
-    ShuftOut( SEG[ hold_s[i] ] ^ 0xFF );
+    ShiftOut( SEG[ hold_s[i] ] ^ 0xFF );
     // Зажигает по очереди сегменты на обоих индикаторах
-    ShuftOut(NUM_SEG[i]);
+    ShiftOut(NUM_SEG[i]);
 
     //digitalWrite(latch_pin, HIGH);
     PORTD |= B00010000;
  }
 }
 
-void ShuftOut( uint8_t value ) {
+void ShiftOut( uint8_t value ) {
     for (uint8_t i = 0; i < 8; i++) {
-     digitalWrite(data_pin,(value & (0x80 >> i)));  //MSB
-     
-     //digitalWrite(clk_pin, HIGH);
-     PORTD |= B00001000;
-     //digitalWrite(clk_pin, LOW);
-     PORTD &= ~B00001000;
+      //digitalWrite(data_pin,(value & (0x80 >> i)));  //MSB
+      !!(value & (0x80 >> i)) == HIGH ? PORTD |= B00000100 : PORTD &= ~B00000100;
+      //digitalWrite(clk_pin, HIGH);
+      PORTD |= B00001000;
+      //digitalWrite(clk_pin, LOW);
+      PORTD &= ~B00001000;
     }
 }
-// End ShuftOut
+// End ShiftOut
 
 void CheckEncoder() {
 
   EncCurrent = PIND & B01100000;
   EncMove = 0;
   if( EncCurrent != EncLast ){
-        if(EncLast == 96){
-              if(EncCurrent == 32) EncMove = -1;
-              if(EncCurrent == 64) EncMove = 1;
-        }
+    if(EncLast == 96){
+      if(EncCurrent == 32) EncMove = -1;
+      if(EncCurrent == 64) EncMove = 1;
+    }
     EncLast = EncCurrent;
     EncFlag = true;
   }//End Проверка состояния encoder
-
-}//End Check Enc
-
-
-
-
-
-
+}
+// End Check Enc
 

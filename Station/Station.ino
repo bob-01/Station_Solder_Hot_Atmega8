@@ -1,19 +1,16 @@
-#define data_pin     2  // DS     14-Pin
-// #define clk_pin      3  // SH_CP  11-Pin
-// #define latch_pin    4  // ST_CP  12-Pin
+// #define data_pin     4  // DS     14-Pin
+// #define clk_pin      5  // SH_CP  11-Pin
+// #define latch_pin    6  // ST_CP  12-Pin
+#define p_solder  A0
+#define p_hot     A1
+#define solder_pwm  9
+#define hot_pwm     10
 
-// Ноги для энкодера
-// #define pin_A          5
-// #define pin_B          6
-// #define EncoderButton  7
+// массив для выбора октетов
+const uint8_t positionSEG[] = {1, 2, 4, 8, 16, 32};
 
-const uint8_t NUM_SEG[] = {
-  1,
-  2,
-  4
-};
-
-const uint8_t SEG[] = {
+// массив для преобразования цыфр
+const uint8_t digitSEG[] = {
 	63,	// 0
 	6,	// 1
 	91,	// 2
@@ -27,120 +24,182 @@ const uint8_t SEG[] = {
 };
 
 unsigned long currentTime,loopTime;
-
+uint16_t SolderTemp = 290, HotTemp = 295;
 int8_t EncMove = 0;
-
 uint8_t EncFlag, EncLast, EncCurrent;
 
-uint16_t SolderTemp = 325, HotTemp = 320;
+uint8_t analog_solder = 0, p_count = 0, chg_flag = 0;
+uint8_t analog_hot = 0;
+uint16_t analog_tmp = 0;
 
-void setup(){
+boolean btn = false, btn_flag = false;
 
-  //2,3,4 порты настраиваем на вывод
-  DDRD |= B00011100;
+int incomingByte = 0;    // for incoming serial data
 
-  //0,1,2,3 порты настраиваем на вывод
-  DDRB |= B00001111;
+void setup() {
+  // Serial.begin(9600); // инициализируем порт, скорость 9600
+    
+  // 4,5,6 порты для 74HC595 настраиваем на вывод 
+  DDRD |= B01110000;
+
+   // 2,3,7 на ввод
+  DDRD &= ~B10001100;
   // Подтягиваем ножки к 1
-  PORTB |= B00000011;
-
-  // 5,6 на ввод
-  DDRD &= ~B11100000;
-  // Подтягиваем ножки к 1
-  PORTD |= B11100000;
+  PORTD |= B10001100;
 
   currentTime = millis();
-  loopTime = currentTime; 
+  loopTime = currentTime;
+
+  pinMode(solder_pwm, OUTPUT);
+  pinMode(hot_pwm, OUTPUT);
+  analogWrite(solder_pwm, 127);
+  analogWrite(hot_pwm, 127);
 }
 
-void loop(){
-
+void loop() {
+while (1) {
+  /*
+  // send data only when you receive data:
+  if (Serial.available() > 0) {
+      // read the incoming byte:
+    incomingByte = Serial.read();
+      // say what you got:
+    Serial.print((char)incomingByte);
+  }
+  */
+ 
   currentTime = millis();
-    
-  //-------------------Проверка каждые 3 мс
-  if(currentTime >= (loopTime + 3)) {
+  //-------------------Проверка каждые 5 мс
+  if(currentTime >= (loopTime + 5)) {
     CheckEncoder();
-    
+    CheckBtn();
     // Счетчик прошедшего времени      
     loopTime = currentTime;
+    p_count++;
   }
-  //-------------------Конец проверка каждые 3 мс
+
+  if (p_count > 20) {
+    p_count = 0;
+    
+    analog_tmp = analogRead(p_solder)/4;
+
+    if (analog_solder != analog_tmp) {
+      analog_solder = analog_tmp;
+      chg_flag = 1;
+      analogWrite(solder_pwm, analog_solder);
+    }
+
+    analog_tmp = analogRead(p_hot)/4;
+
+    if (analog_hot != analog_tmp) {
+      analog_hot = analog_tmp;
+      chg_flag = 1;
+      analogWrite(hot_pwm, analog_hot);
+    }
+
+    if (chg_flag) {
+      chg_flag = 0;
+      Serial.print(analog_solder);
+      Serial.print(" : ");
+      Serial.println(analog_hot);
+    }
+  }
 
   if (EncFlag) {
-    SolderTemp  += EncMove;
-    HotTemp     += EncMove;
+    if (btn == true) HotTemp += EncMove;
+    else SolderTemp  += EncMove;
     EncFlag = false;
   }
 
   PrintTemp( SolderTemp, HotTemp);
 
-}//End loop
+}}//End loop
 
+/*
+Выводит одной строкой температуру паяльника и фена
+*/
 void PrintTemp( uint16_t solder_temp, uint16_t hot_temp ) {
-  
-  uint16_t solder_s[] = {0,0,0}, hold_s[] = {0,0,0};
-  uint16_t y = 0, i = 0;
+  uint8_t digitArr[] = {0,0,0,0,0,0};
+  uint8_t i;
 
-  //преобразуем числа в отдельные цифры
-    solder_s[2] = solder_temp/100;
-    i = solder_temp % 100;
-    solder_s[1] = i/10;
-    solder_s[0] = i%10;
+  // преобразуем числа в отдельные цифры
+  // в начале шкалы темепература паяльника
+  digitArr[5] = hot_temp/100;
+  i = hot_temp % 100;
+  digitArr[4] = i/10;
+  digitArr[3] = i%10;
 
-    hold_s[2]   = hot_temp/100;
-    i = hot_temp % 100;
-    hold_s[1] = i/10;
-    hold_s[0] = i%10;
-  
-  for (i = 0; i < 3; i++) {
-    //digitalWrite(latch_pin, LOW); 4 port
-    //Но если надо выставить 0 так, чтобы не прибить остальные биты в 0,
-    // нужен оператор "И", обозначающийся &. Так же к нему понадобится оператор "НЕ" - обозначается ~.
-    PORTD &= ~B00010000;
-    
-    // Отправляем байт на последнею микросхему в цепочке
-    // инвертирование битов исключающим или ^
-    ShuftOut( SEG[ solder_s[i] ] ^ 0xFF );
-    // Отправляем байт на вторую микросхему в цепочке
-    ShuftOut( SEG[ hold_s[i] ] ^ 0xFF );
-    // Зажигает по очереди сегменты на обоих индикаторах
-    ShuftOut(NUM_SEG[i]);
+  digitArr[2]   = solder_temp/100;
+  i = solder_temp % 100;
+  digitArr[1] = i/10;
+  digitArr[0] = i%10;
 
-    //digitalWrite(latch_pin, HIGH);
-    PORTD |= B00010000;
- }
+  for (i = 0; i < 6; i++) {
+    PORTD &= ~B01000000;
+    ShuftOut(~digitSEG[ digitArr[i] ]);
+    ShuftOut(positionSEG[i]);
+    // delay(5);
+    PORTD |= B01000000;
+  }
 }
 
+/*
+  Побитово выводит цифру через 74HC595
+  Но если надо выставить 0 так, чтобы не прибить остальные биты в 0,
+  нужен оператор "И", обозначающийся &. Так же к нему понадобится оператор "НЕ" - обозначается ~.
+  PORTD &= ~B01000000;
+  Отправляем байт на последнею микросхему в цепочке
+  инвертирование битов исключающим или ^
+  ShuftOut( SEG[ solder_s[i] ] ^ 0xFF );
+  Отправляем байт на вторую микросхему в цепочке
+  ShuftOut( SEG[ hold_s[i] ] ^ 0xFF );
+  Зажигает по очереди сегменты на обоих индикаторах
+  ShuftOut(NUM_SEG[i]);
+  digitalWrite(latch_pin, HIGH);
+  PORTD |= B01000000;
+*/
 void ShuftOut( uint8_t value ) {
     for (uint8_t i = 0; i < 8; i++) {
-     digitalWrite(data_pin,(value & (0x80 >> i)));  //MSB
-     
+     // digitalWrite(data_pin,(value & (0x80 >> i)));  //MSB
+     value & (0x80 >> i) ? PORTD |= B00010000 : PORTD &= ~B00010000;
      //digitalWrite(clk_pin, HIGH);
-     PORTD |= B00001000;
+     PORTD |= B00100000;
      //digitalWrite(clk_pin, LOW);
-     PORTD &= ~B00001000;
+     PORTD &= ~B00100000;
     }
 }
 // End ShuftOut
 
 void CheckEncoder() {
-
-  EncCurrent = PIND & B01100000;
+  EncCurrent = PIND & B00001100;
   EncMove = 0;
-  if( EncCurrent != EncLast ){
-        if(EncLast == 96){
-              if(EncCurrent == 32) EncMove = -1;
-              if(EncCurrent == 64) EncMove = 1;
-        }
+  if( EncCurrent != EncLast ) {
+    // 8 - 12 - 4 - 0 - 8
+    switch (EncCurrent) {
+      case 0  : EncLast == 4 ? EncMove = 1 : EncMove = -1; break;
+      case 4  : EncLast == 12 ? EncMove = 1 : EncMove = -1; break;
+      case 8  : EncLast == 0 ? EncMove = 1 : EncMove = -1; break;
+      case 12 : EncLast == 8 ? EncMove = 1 : EncMove = -1; break;
+      default: break;
+    }
+
+    Serial.print(EncCurrent, DEC);
+    Serial.println();
+
     EncLast = EncCurrent;
     EncFlag = true;
   }//End Проверка состояния encoder
-
 }//End Check Enc
 
+void CheckBtn() {
+  if (((PIND & B10000000) == 0) && (btn_flag == false)) {
+    btn = !btn;
+    btn_flag = true;
 
+    Serial.print("btn :");
+    Serial.println(btn);
+  }
 
-
-
-
+  if ((btn_flag == true) && ((PIND & B10000000) != 0)) btn_flag = false;
+}
 

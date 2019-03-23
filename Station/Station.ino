@@ -1,10 +1,18 @@
 // #define data_pin     4  // DS     14-Pin
 // #define clk_pin      5  // SH_CP  11-Pin
 // #define latch_pin    6  // ST_CP  12-Pin
-#define p_solder  A0
-#define p_hot     A1
-#define solder_pwm  9
-#define hot_pwm     10
+#define termopara_solder      A0
+#define termopara_hot         A2
+#define analog_speed_hot      A1
+#define hot_power             8
+#define solder_pwm            9
+#define hot_speed             10
+
+// solder termopara scaler
+float scaler_solder = 2.3;
+
+// hot termopara scaler
+float scaler_hot = 2.9;
 
 // массив для выбора октетов
 const uint8_t positionSEG[] = {1, 2, 4, 8, 16, 32};
@@ -24,21 +32,15 @@ const uint8_t digitSEG[] = {
 };
 
 unsigned long currentTime,loopTime;
-uint16_t SolderTemp = 290, HotTemp = 295;
-int8_t EncMove = 0;
-uint8_t EncFlag, EncLast, EncCurrent;
-
-uint8_t analog_solder = 0, p_count = 0, chg_flag = 0;
-uint8_t analog_hot = 0;
-uint16_t analog_tmp = 0;
-
+int16_t SetSolderTemp = 290, SetHotTemp = 290, SolderTemp = 0, HotTemp = 0, HotTempAvr = 0;
+int8_t EncMove = 0, EncFlag, EncLast, EncCurrent;
+uint8_t p_count = 0, dispSetTemp = 0, speed_hot = 0, speed_tmp = 0, hot_count = 0;
 boolean btn = false, btn_flag = false;
 
-int incomingByte = 0;    // for incoming serial data
-
 void setup() {
-  // Serial.begin(9600); // инициализируем порт, скорость 9600
-    
+  // set up fast ADC mode
+   ADCSRA = (ADCSRA & 0xf8) | 0x04; // set 16 times division
+
   // 4,5,6 порты для 74HC595 настраиваем на вывод 
   DDRD |= B01110000;
 
@@ -50,24 +52,13 @@ void setup() {
   currentTime = millis();
   loopTime = currentTime;
 
-  pinMode(solder_pwm, OUTPUT);
-  pinMode(hot_pwm, OUTPUT);
-  analogWrite(solder_pwm, 127);
-  analogWrite(hot_pwm, 127);
+  analogWrite(solder_pwm, 50);
+  analogWrite(hot_speed, 20);
+  tone(hot_power, 100, 20);
 }
 
 void loop() {
-while (1) {
-  /*
-  // send data only when you receive data:
-  if (Serial.available() > 0) {
-      // read the incoming byte:
-    incomingByte = Serial.read();
-      // say what you got:
-    Serial.print((char)incomingByte);
-  }
-  */
- 
+while (1) { 
   currentTime = millis();
   //-------------------Проверка каждые 5 мс
   if(currentTime >= (loopTime + 5)) {
@@ -78,59 +69,67 @@ while (1) {
     p_count++;
   }
 
-  if (p_count > 20) {
+  if (p_count > 40) {
     p_count = 0;
+    if (dispSetTemp > 0) dispSetTemp--;
     
-    analog_tmp = analogRead(p_solder)/4;
+    SolderTemp = (AvrValue(termopara_solder))/4 * scaler_solder;
 
-    if (analog_solder != analog_tmp) {
-      analog_solder = analog_tmp;
-      chg_flag = 1;
-      analogWrite(solder_pwm, analog_solder);
+    HotTempAvr += (uint16_t)(analogRead(termopara_hot)/4* scaler_hot);
+    speed_tmp = analogRead(analog_speed_hot)/4;
+    hot_count++;
+    
+    if (speed_hot != speed_tmp) {
+      speed_hot = speed_tmp;
+      analogWrite(hot_speed, (speed_hot + 20 > 255 ? 255 : speed_hot + 20));
     }
+    
+    SetSolder();
 
-    analog_tmp = analogRead(p_hot)/4;
-
-    if (analog_hot != analog_tmp) {
-      analog_hot = analog_tmp;
-      chg_flag = 1;
-      analogWrite(hot_pwm, analog_hot);
-    }
-
-    if (chg_flag) {
-      chg_flag = 0;
-      Serial.print(analog_solder);
-      Serial.print(" : ");
-      Serial.println(analog_hot);
+    if (hot_count > 2) {
+      HotTemp = (int)(HotTempAvr / hot_count);
+      HotTempAvr = 0;
+      hot_count = 0;
+      SetHot();
     }
   }
 
   if (EncFlag) {
-    if (btn == true) HotTemp += EncMove;
-    else SolderTemp  += EncMove;
+    if (btn == true) {
+      SetHotTemp += EncMove;
+      if (SetHotTemp < 0) SetHotTemp = 0;
+      if (SetHotTemp > 480) SetHotTemp = 480;
+    }
+    else {
+      SetSolderTemp  += EncMove;
+      if (SetSolderTemp < 0 ) SetSolderTemp = 0;
+      if (SetSolderTemp > 400) SetSolderTemp = 400;
+    }
     EncFlag = false;
+    dispSetTemp = 10;
   }
 
-  PrintTemp( SolderTemp, HotTemp);
+  if (dispSetTemp > 0) PrintTemp(SetSolderTemp, SetHotTemp);
+  else PrintTemp(SolderTemp, HotTemp);
 
 }}//End loop
 
 /*
 Выводит одной строкой температуру паяльника и фена
 */
-void PrintTemp( uint16_t solder_temp, uint16_t hot_temp ) {
+void PrintTemp( uint16_t stemp, uint16_t htemp ) {
   uint8_t digitArr[] = {0,0,0,0,0,0};
   uint8_t i;
 
   // преобразуем числа в отдельные цифры
   // в начале шкалы темепература паяльника
-  digitArr[5] = hot_temp/100;
-  i = hot_temp % 100;
+  digitArr[5] = htemp/100;
+  i = htemp % 100;
   digitArr[4] = i/10;
   digitArr[3] = i%10;
 
-  digitArr[2]   = solder_temp/100;
-  i = solder_temp % 100;
+  digitArr[2]   = stemp/100;
+  i = stemp % 100;
   digitArr[1] = i/10;
   digitArr[0] = i%10;
 
@@ -201,5 +200,69 @@ void CheckBtn() {
   }
 
   if ((btn_flag == true) && ((PIND & B10000000) != 0)) btn_flag = false;
+}
+
+uint8_t SetSolder() {
+  // SolderTemp 0 .. 255
+  // SetSolderTemp 0 .. 400
+  int k = 0;
+  k = (int)(SetSolderTemp - SolderTemp);
+  
+  if (k > 40) { analogWrite(solder_pwm, 255); return 0; }
+  if (k > 15) { analogWrite(solder_pwm, 200); return 0; }
+  if (k > 7) { analogWrite(solder_pwm, 170); return 0; }
+  if (k > 4) { analogWrite(solder_pwm, 135); return 0; }
+  if (k >= 0) { analogWrite(solder_pwm, 100); return 0; }
+  if (k < -20) { analogWrite(solder_pwm, 15); return 0; }
+  if (k < -10) { analogWrite(solder_pwm, 45); return 0; }
+  if (k < 0) { analogWrite(solder_pwm, 60); return 0; }
+  analogWrite(solder_pwm, 35);
+  return 0;
+}
+
+uint8_t SetHot() {
+  // HotTemp 0 .. 255
+  // SetHotTemp 0 .. 480
+  int k = 0;
+  k = (int)(SetHotTemp - HotTemp);
+
+  if (k > 50)   { tone(hot_power, 100, 1000); return 0; }
+  if (k > 30)   { tone(hot_power, 100, 400); return 0; }
+  if (k > 20)   { tone(hot_power, 100, 150); return 0; }
+  if (k > 10)    { tone(hot_power, 100, 100); return 0; }
+  if (k > 5)    { tone(hot_power, 100, 80); return 0; }
+  if (k > 0)    { tone(hot_power, 100, 60); return 0; }
+  if (k < -30)  { tone(hot_power, 100, 1); return 0; }
+  if (k < 0)    { tone(hot_power, 100, 50); return 0; }
+  noTone(hot_power);
+  return 0;
+}
+
+uint16_t AvrValue(uint8_t pin) {
+  uint16_t val[10], tmp;
+  uint8_t i, j, count;
+
+  count = (sizeof(val)/sizeof(int));
+
+  for (i = 0; i < count; i++) {
+    val[i] = analogRead(pin);
+  }
+
+  for (i = 0; i < count; i++) {
+  for (j = 0; j < count - i - 1; j++) {
+    if (val[j] > val[j+1]) {
+      tmp = val[j];
+      val[j] = val[j+1];
+      val[j+1] = tmp;
+    }
+  }}
+
+  tmp = 0;
+  for (i = 1; i < count - 1; i++) {
+    tmp += val[i];
+  }
+
+  val[0] = tmp/(count - 2);
+  return val[0];
 }
 

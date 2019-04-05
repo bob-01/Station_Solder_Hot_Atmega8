@@ -7,6 +7,8 @@
 #define hot_power             8
 #define solder_pwm            9
 #define hot_speed             10
+#define hot_rele              11
+#define hot_button            12
 
 // solder termopara scaler
 float scaler_solder = 2.3;
@@ -32,10 +34,10 @@ const uint8_t digitSEG[] = {
 };
 
 unsigned long currentTime,loopTime;
-int16_t SetSolderTemp = 290, SetHotTemp = 290, SolderTemp = 0, HotTemp = 0, HotTempAvr = 0;
+int16_t SetSolderTemp = 290, SetHotTemp = 290, SolderTemp = 0, HotTemp = 0;
 int8_t EncMove = 0, EncFlag, EncLast, EncCurrent;
-uint8_t p_count = 0, dispSetTemp = 0, speed_hot = 0, speed_tmp = 0, hot_count = 0;
-boolean btn = false, btn_flag = false;
+uint8_t p_count = 0, dispSetTemp = 0, speed_hot = 0, speed_tmp = 0, hot_enable = 0;
+boolean btn = false, hot_flag = false, btn_flag = false, cooler_flag = false;;
 
 void setup() {
   // set up fast ADC mode
@@ -49,12 +51,16 @@ void setup() {
   // Подтягиваем ножки к 1
   PORTD |= B10001100;
 
+  pinMode(hot_rele, OUTPUT);
+  pinMode(hot_button, INPUT);
+  digitalWrite(hot_button, HIGH);
+
   currentTime = millis();
   loopTime = currentTime;
 
   analogWrite(solder_pwm, 50);
-  analogWrite(hot_speed, 20);
-  tone(hot_power, 100, 20);
+  analogWrite(hot_speed, 0);
+  noTone(hot_power);
 }
 
 void loop() {
@@ -74,24 +80,16 @@ while (1) {
     if (dispSetTemp > 0) dispSetTemp--;
     
     SolderTemp = (AvrValue(termopara_solder))/4 * scaler_solder;
-
-    HotTempAvr += (uint16_t)(analogRead(termopara_hot)/4* scaler_hot);
+    HotTemp = (AvrValue(termopara_hot))/4* scaler_hot;
     speed_tmp = analogRead(analog_speed_hot)/4;
-    hot_count++;
     
-    if (speed_hot != speed_tmp) {
+    if ((speed_hot != speed_tmp) && hot_flag) {
       speed_hot = speed_tmp;
       analogWrite(hot_speed, (speed_hot + 20 > 255 ? 255 : speed_hot + 20));
     }
     
     SetSolder();
-
-    if (hot_count > 2) {
-      HotTemp = (int)(HotTempAvr / hot_count);
-      HotTempAvr = 0;
-      hot_count = 0;
-      SetHot();
-    }
+    SetHot();
   }
 
   if (EncFlag) {
@@ -137,7 +135,6 @@ void PrintTemp( uint16_t stemp, uint16_t htemp ) {
     PORTD &= ~B01000000;
     ShuftOut(~digitSEG[ digitArr[i] ]);
     ShuftOut(positionSEG[i]);
-    // delay(5);
     PORTD |= B01000000;
   }
 }
@@ -182,9 +179,6 @@ void CheckEncoder() {
       default: break;
     }
 
-    Serial.print(EncCurrent, DEC);
-    Serial.println();
-
     EncLast = EncCurrent;
     EncFlag = true;
   }//End Проверка состояния encoder
@@ -194,12 +188,24 @@ void CheckBtn() {
   if (((PIND & B10000000) == 0) && (btn_flag == false)) {
     btn = !btn;
     btn_flag = true;
-
-    Serial.print("btn :");
-    Serial.println(btn);
   }
 
-  if ((btn_flag == true) && ((PIND & B10000000) != 0)) btn_flag = false;
+  if (((PINB & B00010000) == 0) && (btn_flag == false)) {
+    hot_flag = !hot_flag;
+    if (hot_flag) {
+      analogWrite(hot_speed, speed_hot + 20);
+      digitalWrite(hot_rele, HIGH);
+      cooler_flag = true;
+    }
+    else {
+      noTone(hot_power);
+      digitalWrite(hot_rele, LOW);
+      analogWrite(hot_speed, 255);
+    }
+    btn_flag = true;
+  }
+
+  if ((btn_flag == true) && ((PIND & B10000000) != 0) && ((PINB & B00010000) != 0)) btn_flag = false;
 }
 
 uint8_t SetSolder() {
@@ -223,6 +229,12 @@ uint8_t SetSolder() {
 uint8_t SetHot() {
   // HotTemp 0 .. 255
   // SetHotTemp 0 .. 480
+  if (!hot_flag && (HotTemp < 60) && cooler_flag) {
+    analogWrite(hot_speed, 0);
+    cooler_flag = false;
+    return 0;
+  }
+
   int k = 0;
   k = (int)(SetHotTemp - HotTemp);
 
@@ -239,7 +251,7 @@ uint8_t SetHot() {
 }
 
 uint16_t AvrValue(uint8_t pin) {
-  uint16_t val[10], tmp;
+  uint16_t val[14], tmp;
   uint8_t i, j, count;
 
   count = (sizeof(val)/sizeof(int));
@@ -257,12 +269,6 @@ uint16_t AvrValue(uint8_t pin) {
     }
   }}
 
-  tmp = 0;
-  for (i = 1; i < count - 1; i++) {
-    tmp += val[i];
-  }
-
-  val[0] = tmp/(count - 2);
-  return val[0];
+  return val[(int)(count/2)];
 }
 

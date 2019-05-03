@@ -14,7 +14,7 @@
 float scaler_solder = 2.3;
 
 // hot termopara scaler
-float scaler_hot = 2.9;
+float scaler_hot = 4.0;
 
 // массив для выбора октетов
 const uint8_t positionSEG[] = {1, 2, 4, 8, 16, 32};
@@ -34,7 +34,7 @@ const uint8_t digitSEG[] = {
 };
 
 unsigned long currentTime,loopTime;
-int16_t SetSolderTemp = 290, SetHotTemp = 290, SolderTemp = 0, HotTemp = 0;
+int16_t SetSolderTemp = 290, SetHotTemp = 100, SolderTemp = 0, HotTemp = 0;
 int8_t EncMove = 0, EncFlag, EncLast, EncCurrent;
 uint8_t p_count = 0, dispSetTemp = 0, speed_hot = 0, speed_tmp = 0, hot_enable = 0;
 boolean btn = false, hot_flag = false, btn_flag = false, cooler_flag = false;;
@@ -241,11 +241,12 @@ uint8_t SetHot() {
   if (k > 50)   { tone(hot_power, 100, 1000); return 0; }
   if (k > 30)   { tone(hot_power, 100, 400); return 0; }
   if (k > 20)   { tone(hot_power, 100, 150); return 0; }
-  if (k > 10)    { tone(hot_power, 100, 100); return 0; }
-  if (k > 5)    { tone(hot_power, 100, 80); return 0; }
-  if (k > 0)    { tone(hot_power, 100, 60); return 0; }
-  if (k < -30)  { tone(hot_power, 100, 1); return 0; }
-  if (k < 0)    { tone(hot_power, 100, 50); return 0; }
+  if (k > 10)   { tone(hot_power, 100, 80); return 0; }
+  if (k > 5)    { tone(hot_power, 100, 50); return 0; }
+  if (k > 0)    { tone(hot_power, 100, 20); return 0; }
+  if (k < -50)  { tone(hot_power, 1, 1); return 0; }
+  if (k < -30)  { tone(hot_power, 100, 5); return 0; }
+  if (k < 0)    { tone(hot_power, 100, 20); return 0; }
   noTone(hot_power);
   return 0;
 }
@@ -271,4 +272,3 @@ uint16_t AvrValue(uint8_t pin) {
 
   return val[(int)(count/2)];
 }
-

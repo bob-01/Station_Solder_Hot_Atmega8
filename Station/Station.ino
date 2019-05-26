@@ -1,3 +1,10 @@
+/**
+HAKKO A1321
+for 900M 900L 907 908 913 914
+https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
+*/
+
+
 // #define data_pin     4  // DS     14-Pin
 // #define clk_pin      5  // SH_CP  11-Pin
 // #define latch_pin    6  // ST_CP  12-Pin
@@ -11,7 +18,7 @@
 #define hot_button            12
 
 // solder termopara scaler
-float scaler_solder = 2.3;
+float scaler_solder = 1;
 
 // hot termopara scaler
 float scaler_hot = 4.0;
@@ -21,16 +28,16 @@ const uint8_t positionSEG[] = {1, 2, 4, 8, 16, 32};
 
 // массив для преобразования цыфр
 const uint8_t digitSEG[] = {
-	63,	// 0
-	6,	// 1
-	91,	// 2
-	79,	// 3
-	102,	// 4
-	109,	// 5
-	253,	// 6
-	7,	// 7
-	255,	// 8
-	239,	// 9
+  63, // 0
+  6,  // 1
+  91, // 2
+  79, // 3
+  102,  // 4
+  109,  // 5
+  253,  // 6
+  7,  // 7
+  255,  // 8
+  239,  // 9
 };
 
 unsigned long currentTime,loopTime;
@@ -75,7 +82,7 @@ while (1) {
     p_count++;
   }
 
-  if (p_count > 40) {
+  if (p_count > 30) {
     p_count = 0;
     if (dispSetTemp > 0) dispSetTemp--;
     
@@ -85,7 +92,7 @@ while (1) {
     
     if ((speed_hot != speed_tmp) && hot_flag) {
       speed_hot = speed_tmp;
-      analogWrite(hot_speed, (speed_hot + 20 > 255 ? 255 : speed_hot + 20));
+      analogWrite(hot_speed, (speed_hot + 25 > 255 ? 255 : speed_hot + 25));
     }
     
     SetSolder();
@@ -213,16 +220,21 @@ uint8_t SetSolder() {
   // SetSolderTemp 0 .. 400
   int k = 0;
   k = (int)(SetSolderTemp - SolderTemp);
-  
-  if (k > 40) { analogWrite(solder_pwm, 255); return 0; }
-  if (k > 15) { analogWrite(solder_pwm, 200); return 0; }
-  if (k > 7) { analogWrite(solder_pwm, 170); return 0; }
-  if (k > 4) { analogWrite(solder_pwm, 135); return 0; }
-  if (k >= 0) { analogWrite(solder_pwm, 100); return 0; }
-  if (k < -20) { analogWrite(solder_pwm, 15); return 0; }
-  if (k < -10) { analogWrite(solder_pwm, 45); return 0; }
-  if (k < 0) { analogWrite(solder_pwm, 60); return 0; }
-  analogWrite(solder_pwm, 35);
+
+  if (k > 30) { analogWrite(solder_pwm, 255); return 0; }
+  if (k > 10) { analogWrite(solder_pwm, 200); return 0; }
+  if (k > 5)  { analogWrite(solder_pwm, 170); return 0; }
+  if (k > 3)  { analogWrite(solder_pwm, 140); return 0; }
+  if (k > 2)  { analogWrite(solder_pwm, 100); return 0; }
+  if (k > 1)  { analogWrite(solder_pwm, 70); return 0; }
+  if (k >= 0) { analogWrite(solder_pwm, 60); return 0; }
+  if (k < -100) { digitalWrite(solder_pwm,LOW); return 0; }
+  if (k < -20) { analogWrite(solder_pwm, 10); return 0; }
+  if (k < -10) { analogWrite(solder_pwm, 20); return 0; }
+  if (k < -5) { analogWrite(solder_pwm, 30); return 0; }
+  if (k < -2) { analogWrite(solder_pwm, 45); return 0; }
+  if (k < 0) { analogWrite(solder_pwm, 5); return 0; }
+  digitalWrite(solder_pwm,LOW);
   return 0;
 }
 
@@ -231,6 +243,7 @@ uint8_t SetHot() {
   // SetHotTemp 0 .. 480
   if (!hot_flag && (HotTemp < 60) && cooler_flag) {
     analogWrite(hot_speed, 0);
+    digitalWrite(hot_speed,LOW);
     cooler_flag = false;
     return 0;
   }

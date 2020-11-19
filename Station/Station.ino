@@ -18,26 +18,28 @@ https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
 #define hot_button            12
 
 // solder termopara scaler
-float scaler_solder = 1;
+float scaler_solder = 2.0;
 
 // hot termopara scaler
 float scaler_hot = 4.0;
 
 // массив для выбора октетов
-const uint8_t positionSEG[] = {1, 2, 4, 8, 16, 32};
+const uint8_t positionSEG[] = {8, 4, 2, 64, 32, 16}; // 15 нога не задействована
 
 // массив для преобразования цыфр
 const uint8_t digitSEG[] = {
-  63, // 0
-  6,  // 1
-  91, // 2
-  79, // 3
-  102,  // 4
-  109,  // 5
-  253,  // 6
-  7,  // 7
+  254,  // 0
+  56,   // 1
+  183,  // 2
+  189,  // 3
+  121,  // 4
+  221,  // 5
+  223,  // 6
+  184,  // 7
   255,  // 8
-  239,  // 9
+  253,  // 9
+  1,    // -
+  195,  // F
 };
 
 unsigned long currentTime,loopTime;
@@ -49,6 +51,10 @@ boolean btn = false, hot_flag = false, btn_flag = false, cooler_flag = false;;
 void setup() {
   // set up fast ADC mode
    ADCSRA = (ADCSRA & 0xf8) | 0x04; // set 16 times division
+   
+  // Timer 1 62 500 Гц Pin 9 10
+  TCCR1A = TCCR1A & 0xe0 | 1;
+  TCCR1B = TCCR1B & 0xe0 | 0x09;
 
   // 4,5,6 порты для 74HC595 настраиваем на вывод 
   DDRD |= B01110000;
@@ -86,13 +92,13 @@ while (1) {
     p_count = 0;
     if (dispSetTemp > 0) dispSetTemp--;
     
-    SolderTemp = (AvrValue(termopara_solder))/4 * scaler_solder;
-    HotTemp = (AvrValue(termopara_hot))/4* scaler_hot;
-    speed_tmp = analogRead(analog_speed_hot)/4;
+    SolderTemp = ((AvrValue(termopara_solder))/4) * scaler_solder;
+    HotTemp = ((AvrValue(termopara_hot))/4) * scaler_hot;
+    speed_tmp = (int)(analogRead(analog_speed_hot)/8);
     
     if ((speed_hot != speed_tmp) && hot_flag) {
       speed_hot = speed_tmp;
-      analogWrite(hot_speed, (speed_hot + 25 > 255 ? 255 : speed_hot + 25));
+      analogWrite(hot_speed, (speed_hot + 15 > 255 ? 255 : speed_hot + 15));
     }
     
     SetSolder();
@@ -221,19 +227,18 @@ uint8_t SetSolder() {
   int k = 0;
   k = (int)(SetSolderTemp - SolderTemp);
 
-  if (k > 30) { analogWrite(solder_pwm, 255); return 0; }
-  if (k > 10) { analogWrite(solder_pwm, 200); return 0; }
-  if (k > 5)  { analogWrite(solder_pwm, 170); return 0; }
-  if (k > 3)  { analogWrite(solder_pwm, 140); return 0; }
-  if (k > 2)  { analogWrite(solder_pwm, 100); return 0; }
-  if (k > 1)  { analogWrite(solder_pwm, 70); return 0; }
-  if (k >= 0) { analogWrite(solder_pwm, 60); return 0; }
-  if (k < -100) { digitalWrite(solder_pwm,LOW); return 0; }
+  if (k > 10) { analogWrite(solder_pwm, 255); return 0; }
+  if (k > 5)  { analogWrite(solder_pwm, 220); return 0; }
+  if (k > 3)  { analogWrite(solder_pwm, 200); return 0; }
+  if (k > 2)  { analogWrite(solder_pwm, 150); return 0; }
+  if (k > 1)  { analogWrite(solder_pwm, 120); return 0; }
+  if (k >= 0) { analogWrite(solder_pwm, 100); return 0; }
+  if (k < -100) { digitalWrite(solder_pwm, LOW); return 0; }
   if (k < -20) { analogWrite(solder_pwm, 10); return 0; }
   if (k < -10) { analogWrite(solder_pwm, 20); return 0; }
   if (k < -5) { analogWrite(solder_pwm, 30); return 0; }
-  if (k < -2) { analogWrite(solder_pwm, 45); return 0; }
-  if (k < 0) { analogWrite(solder_pwm, 5); return 0; }
+  if (k < -2) { analogWrite(solder_pwm, 40); return 0; }
+  if (k < 0) { analogWrite(solder_pwm, 80); return 0; }
   digitalWrite(solder_pwm,LOW);
   return 0;
 }
@@ -241,7 +246,7 @@ uint8_t SetSolder() {
 uint8_t SetHot() {
   // HotTemp 0 .. 255
   // SetHotTemp 0 .. 480
-  if (!hot_flag && (HotTemp < 60) && cooler_flag) {
+  if (!hot_flag && (HotTemp < 50) && cooler_flag) {
     analogWrite(hot_speed, 0);
     digitalWrite(hot_speed,LOW);
     cooler_flag = false;
@@ -252,14 +257,17 @@ uint8_t SetHot() {
   k = (int)(SetHotTemp - HotTemp);
 
   if (k > 50)   { tone(hot_power, 100, 1000); return 0; }
-  if (k > 30)   { tone(hot_power, 100, 400); return 0; }
-  if (k > 20)   { tone(hot_power, 100, 150); return 0; }
-  if (k > 10)   { tone(hot_power, 100, 80); return 0; }
+  if (k > 30)   { tone(hot_power, 100, 600); return 0; }
+  if (k > 20)   { tone(hot_power, 100, 300); return 0; }
+  if (k > 10)   { tone(hot_power, 100, 100); return 0; }
   if (k > 5)    { tone(hot_power, 100, 50); return 0; }
-  if (k > 0)    { tone(hot_power, 100, 20); return 0; }
+  if (k > 0)    { tone(hot_power, 100, 30); return 0; }
   if (k < -50)  { tone(hot_power, 1, 1); return 0; }
   if (k < -30)  { tone(hot_power, 100, 5); return 0; }
-  if (k < 0)    { tone(hot_power, 100, 20); return 0; }
+  if (k < -20)  { tone(hot_power, 100, 10); return 0; }
+  if (k > -10)    { tone(hot_power, 100, 15); return 0; }
+  if (k > -5)    { tone(hot_power, 100, 20); return 0; }
+  if (k < 0)    { tone(hot_power, 100, 25); return 0; }
   noTone(hot_power);
   return 0;
 }

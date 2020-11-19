@@ -177,7 +177,7 @@ void ShuftOut( uint8_t value ) {
      PORTD &= ~B00100000;
     }
 }
-// End ShuftOut
+// End ShiftOut
 
 void CheckEncoder() {
   EncCurrent = PIND & B00001100;

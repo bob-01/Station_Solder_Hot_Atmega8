@@ -4,6 +4,7 @@ for 900M 900L 907 908 913 914
 https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
 */
 
+#include <EEPROM.h> // Для работы со встроенной памятью ATmega
 
 // #define data_pin     4  // DS     14-Pin
 // #define clk_pin      5  // SH_CP  11-Pin
@@ -47,8 +48,11 @@ int16_t SetSolderTemp = 290, SetHotTemp = 100, SolderTemp = 0, HotTemp = 0;
 int8_t EncMove = 0, EncFlag, EncLast, EncCurrent;
 uint8_t p_count = 0, dispSetTemp = 0, speed_hot = 0, speed_tmp = 0, hot_enable = 0;
 boolean btn = false, hot_flag = false, btn_flag = false, cooler_flag = false;;
+uint16_t pressCount = 0;
 
 void setup() {
+  Read_EEPROM();
+
   // set up fast ADC mode
    ADCSRA = (ADCSRA & 0xf8) | 0x04; // set 16 times division
    
@@ -120,9 +124,12 @@ while (1) {
     dispSetTemp = 10;
   }
 
-  if (dispSetTemp > 0) PrintTemp(SetSolderTemp, SetHotTemp);
-  else PrintTemp(SolderTemp, HotTemp);
-
+  if (dispSetTemp > 0) {
+    PrintTemp(SetSolderTemp, SetHotTemp);
+  }
+  else {
+    PrintTemp(SolderTemp, HotTemp);
+  }
 }}//End loop
 
 /*
@@ -199,7 +206,6 @@ void CheckEncoder() {
 
 void CheckBtn() {
   if (((PIND & B10000000) == 0) && (btn_flag == false)) {
-    btn = !btn;
     btn_flag = true;
   }
 
@@ -218,7 +224,35 @@ void CheckBtn() {
     btn_flag = true;
   }
 
-  if ((btn_flag == true) && ((PIND & B10000000) != 0) && ((PINB & B00010000) != 0)) btn_flag = false;
+  if(!btn_flag) {
+    return;
+  }
+
+  if ((btn_flag == true) && ((PIND & B10000000) != 0) && ((PINB & B00010000) != 0)) {
+    if(pressCount < 700) {
+      btn = !btn;
+    }
+
+    pressCount = 0;
+    btn_flag = false;
+    return;
+  }
+
+  if(pressCount < 1000) {
+    pressCount++;
+  }
+
+  if(pressCount > 700){
+    if(btn) {
+      EEPROM.put(2, SetHotTemp);
+    }
+    else {
+      EEPROM.put(0, SetSolderTemp);
+    }
+
+    pressCount = 0;
+    btn_flag = false;
+  }
 }
 
 uint8_t SetSolder() {
@@ -292,4 +326,23 @@ uint16_t AvrValue(uint8_t pin) {
   }}
 
   return val[(int)(count/2)];
+}
+
+/*
+  EEPROM
+  0-1   (2 Byte) Solder T
+  2-3   (2 Byte) Hot T
+*/
+void Read_EEPROM() {
+  EEPROM.get(0, SetSolderTemp);
+  if (SetSolderTemp > 1000 || SetSolderTemp < 0) {
+    SetSolderTemp = 300;
+    EEPROM.put(0, SetSolderTemp);
+  }
+
+  EEPROM.get(2, SetHotTemp);
+  if (SetHotTemp > 1000 || SetHotTemp < 0) {
+    SetHotTemp = 100;
+    EEPROM.put(0, SetHotTemp);
+  }
 }

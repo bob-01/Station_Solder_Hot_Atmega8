@@ -98,7 +98,7 @@ while (1) {
     
     SolderTemp = ((AvrValue(termopara_solder))/4) * scaler_solder;
     HotTemp = ((AvrValue(termopara_hot))/4) * scaler_hot;
-    speed_tmp = (int)(analogRead(analog_speed_hot)/8);
+    speed_tmp = (int)(analogRead(analog_speed_hot)/6);
     
     if ((speed_hot != speed_tmp) && hot_flag) {
       speed_hot = speed_tmp;

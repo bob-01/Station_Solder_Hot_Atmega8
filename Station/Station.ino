@@ -14,7 +14,7 @@ https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
 #define analog_speed_hot      A1
 #define hot_power             8
 #define solder_pwm            9
-#define hot_speed             10
+#define FEN_FAN_PIN           10
 #define hot_rele              11
 #define hot_button            12
 
@@ -76,7 +76,7 @@ void setup() {
   loopTime = currentTime;
 
   analogWrite(solder_pwm, 50);
-  analogWrite(hot_speed, 0);
+  analogWrite(FEN_FAN_PIN, 0);
   noTone(hot_power);
 }
 
@@ -102,7 +102,7 @@ while (1) {
     
     if ((speed_hot != speed_tmp) && hot_flag) {
       speed_hot = speed_tmp;
-      analogWrite(hot_speed, (speed_hot + 15 > 255 ? 255 : speed_hot + 15));
+      analogWrite(FEN_FAN_PIN, (speed_hot + 15 > 255 ? 255 : speed_hot + 15));
     }
     
     SetSolder();
@@ -212,14 +212,14 @@ void CheckBtn() {
   if (((PINB & B00010000) == 0) && (btn_flag == false)) {
     hot_flag = !hot_flag;
     if (hot_flag) {
-      analogWrite(hot_speed, speed_hot + 20);
+      analogWrite(FEN_FAN_PIN, 150);
       digitalWrite(hot_rele, HIGH);
       cooler_flag = true;
     }
     else {
       noTone(hot_power);
       digitalWrite(hot_rele, LOW);
-      analogWrite(hot_speed, 255);
+      analogWrite(FEN_FAN_PIN, 255);
     }
     btn_flag = true;
   }
@@ -281,8 +281,8 @@ uint8_t SetHot() {
   // HotTemp 0 .. 255
   // SetHotTemp 0 .. 480
   if (!hot_flag && (HotTemp < 50) && cooler_flag) {
-    analogWrite(hot_speed, 0);
-    digitalWrite(hot_speed,LOW);
+    noTone(hot_power);
+    digitalWrite(FEN_FAN_PIN, LOW);
     cooler_flag = false;
     return 0;
   }
@@ -296,11 +296,11 @@ uint8_t SetHot() {
   if (k > 10)   { tone(hot_power, 100, 100); return 0; }
   if (k > 5)    { tone(hot_power, 100, 50); return 0; }
   if (k > 0)    { tone(hot_power, 100, 30); return 0; }
-  if (k < -50)  { tone(hot_power, 1, 1); return 0; }
+  if (k < -50)  { tone(hot_power, 100, 1); return 0; }
   if (k < -30)  { tone(hot_power, 100, 5); return 0; }
   if (k < -20)  { tone(hot_power, 100, 10); return 0; }
-  if (k > -10)    { tone(hot_power, 100, 15); return 0; }
-  if (k > -5)    { tone(hot_power, 100, 20); return 0; }
+  if (k > -10)  { tone(hot_power, 100, 15); return 0; }
+  if (k > -5)   { tone(hot_power, 100, 20); return 0; }
   if (k < 0)    { tone(hot_power, 100, 25); return 0; }
   noTone(hot_power);
   return 0;
